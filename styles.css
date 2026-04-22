@@ -491,6 +491,10 @@ table.history td.total{font-weight:700; color:var(--brand-deep)}
   .today-chip{padding:7px}
   .sync-chip .sync-text{display:none}
   .sync-chip{padding:7px}
+  .toolbar{gap:10px}
+  .toolbar .field{width:100%; flex:1 1 100%}
+  .toolbar .quick-chips{width:100%; flex:1 1 100%}
+  .toolbar .quick-chips .chip-btn{flex:1}
   .toolbar-actions{margin-left:0; width:100%}
   .toolbar-actions button{flex:1}
 }
