@@ -239,7 +239,17 @@ input[type=text],input[type=number],input[type=date],input[type=month]{
   font-family:inherit;
   box-sizing:border-box;
 }
-input[type=date],input[type=month]{text-align:left}
+input[type=date],input[type=month]{
+  text-align:left;
+  -webkit-appearance:none;
+  appearance:none;
+  max-width:100%;
+  display:block;
+}
+input[type=date]::-webkit-date-and-time-value,
+input[type=month]::-webkit-date-and-time-value{text-align:left}
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=month]::-webkit-calendar-picker-indicator{margin-left:auto}
 input:focus{border-color:var(--brand); box-shadow:0 0 0 4px rgba(13,148,136,.12)}
 input::placeholder{color:var(--muted-2)}
 
@@ -492,7 +502,8 @@ table.history td.total{font-weight:700; color:var(--brand-deep)}
   .sync-chip .sync-text{display:none}
   .sync-chip{padding:7px}
   .toolbar{gap:10px}
-  .toolbar .field{width:100%; flex:1 1 100%}
+  .toolbar .field{width:100%; flex:1 1 100%; min-width:0}
+  .toolbar .field input{width:100%; max-width:100%}
   .toolbar .quick-chips{width:100%; flex:1 1 100%}
   .toolbar .quick-chips .chip-btn{flex:1}
   .toolbar-actions{margin-left:0; width:100%}
