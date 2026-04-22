@@ -1,0 +1,20 @@
+{
+  "name": "ระบบบัญชีรับซื้อ",
+  "short_name": "บัญชีรับซื้อ",
+  "description": "ระบบบันทึกรายการรับซื้อ คำนวณราคา และสรุปยอดรายวัน/รายเดือน",
+  "lang": "th",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fafaf8",
+  "theme_color": "#0d9488",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
