@@ -364,6 +364,47 @@ input::placeholder{color:var(--muted-2)}
 
 /* Toolbar */
 .toolbar{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap}
+.toolbar [hidden]{display:none !important}
+
+/* Period segmented toggle */
+.period-toggle{
+  display:inline-flex; gap:2px;
+  background:#f4f3ef; padding:3px;
+  border-radius:11px;
+  border:1px solid var(--line-2);
+  align-self:flex-end;
+  box-sizing:border-box;
+}
+.period-btn{
+  appearance:none; cursor:pointer; border:none;
+  background:transparent; color:var(--muted);
+  padding:0 18px; min-height:36px;
+  display:inline-flex; align-items:center; justify-content:center;
+  border-radius:8px;
+  font-size:13px; font-weight:700;
+  font-family:inherit;
+  transition:background .15s, color .15s, box-shadow .15s;
+  box-sizing:border-box;
+}
+.period-btn.active{
+  background:#fff; color:var(--brand-deep);
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
+}
+.period-btn:not(.active):hover{color:var(--ink-2)}
+
+/* Export row (separate from filters to keep layout tidy) */
+.export-bar{
+  display:flex; align-items:center; gap:8px;
+  flex-wrap:wrap;
+  margin-top:14px; padding-top:12px;
+  border-top:1px dashed var(--line);
+}
+.export-label{
+  font-size:12px; color:var(--muted);
+  font-weight:700; letter-spacing:.3px;
+  margin-right:4px;
+}
+.export-bar .btn-ghost{flex:0 0 auto}
 .field{display:flex; flex-direction:column; gap:5px; margin:0}
 .field-label{font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.3px}
 .field.grow{flex:1; min-width:160px}
@@ -530,6 +571,11 @@ table.history td.total{font-weight:700; color:var(--brand-deep)}
   .toolbar .quick-chips .chip-btn{flex:1}
   .toolbar-actions{margin-left:0; width:100%}
   .toolbar-actions button{flex:1}
+  .period-toggle{width:100%; justify-content:stretch}
+  .period-toggle .period-btn{flex:1}
+  .export-bar{gap:6px}
+  .export-bar .btn-ghost{flex:1 1 calc(33% - 6px); justify-content:center}
+  .export-label{width:100%; margin-bottom:2px}
 }
 
 /* Utilities */

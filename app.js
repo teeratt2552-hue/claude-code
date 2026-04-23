@@ -233,6 +233,33 @@
   function yesterdayKey(){ const d = new Date(); d.setDate(d.getDate()-1); return toDateKey(d); }
   function lastMonthKey(){ const d = new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return toMonthKey(d); }
 
+  // Week helpers (Monday-start week)
+  function weekStart(date){
+    const d = new Date(date);
+    d.setHours(0,0,0,0);
+    const day = d.getDay(); // 0=Sun, 1=Mon...
+    const offset = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + offset);
+    return d;
+  }
+  function weekEnd(date){
+    const s = weekStart(date);
+    const e = new Date(s);
+    e.setDate(e.getDate() + 6);
+    e.setHours(23,59,59,999);
+    return e;
+  }
+  function thisWeekDateKey(){ return toDateKey(new Date()); }
+  function lastWeekDateKey(){ const d = new Date(); d.setDate(d.getDate()-7); return toDateKey(d); }
+  function formatWeekRangeThai(date){
+    const s = weekStart(date), e = weekEnd(date);
+    const sameMonth = s.getMonth() === e.getMonth();
+    if (sameMonth) {
+      return `${s.getDate()}–${e.getDate()} ${THAI_MONTHS[s.getMonth()]} ${s.getFullYear()+543}`;
+    }
+    return `${s.getDate()} ${THAI_MONTHS[s.getMonth()]} – ${e.getDate()} ${THAI_MONTHS[e.getMonth()]} ${e.getFullYear()+543}`;
+  }
+
   function formatDateThai(ds){
     const [y,m,d] = ds.split('-').map(Number);
     const dt = new Date(y, m-1, d);
@@ -273,8 +300,13 @@
   const histBody = $('#histBody');
 
   const graphMonth = $('#graphMonth');
+  const graphWeekDate = $('#graphWeekDate');
+  const fieldGraphMonth = $('#fieldGraphMonth'), fieldGraphWeek = $('#fieldGraphWeek');
+  const monthChips = $('#monthChips'), weekChips = $('#weekChips');
   const gMoney = $('#gMoney'), gWeight = $('#gWeight'), gCount = $('#gCount');
   const chartMoney = $('#chartMoney'), chartWeight = $('#chartWeight');
+  const chartMoneyTitle = $('#chartMoneyTitle'), chartWeightTitle = $('#chartWeightTitle');
+  let graphPeriod = 'month'; // 'week' | 'month'
 
   /* ---------- Tabs ---------- */
   function switchTab(name){
@@ -462,6 +494,19 @@
     if (list.length === 0) return toast('ไม่มีข้อมูลให้ export', 'error');
     exportCSV(list, `รับซื้อ_${key}.csv`);
   });
+  $('#btnExportWeek').addEventListener('click', () => {
+    const key = histDate.value || todayKey();
+    const [y,m,d] = key.split('-').map(Number);
+    const base = new Date(y, m-1, d);
+    const s = weekStart(base), e = weekEnd(base);
+    const sKey = toDateKey(s);
+    const list = loadAll().filter(r => {
+      const rd = new Date(r.ts);
+      return rd >= s && rd <= e;
+    }).sort((a,b)=>a.ts.localeCompare(b.ts));
+    if (list.length === 0) return toast('ไม่มีข้อมูลในสัปดาห์นี้', 'error');
+    exportCSV(list, `รับซื้อ_สัปดาห์_${sKey}.csv`);
+  });
   $('#btnExportMonth').addEventListener('click', () => {
     const key = histDate.value || todayKey();
     const month = key.slice(0,7);
@@ -498,31 +543,82 @@
   }
 
   /* ---------- Graph tab ---------- */
+  function applyGraphPeriod(){
+    const isWeek = graphPeriod === 'week';
+    fieldGraphWeek.hidden = !isWeek;
+    fieldGraphMonth.hidden = isWeek;
+    weekChips.hidden = !isWeek;
+    monthChips.hidden = isWeek;
+    $$('.period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === graphPeriod));
+  }
+
   function renderGraph(){
-    const key = graphMonth.value || thisMonthKey();
-    if (!graphMonth.value) graphMonth.value = key;
-    const [y,m] = key.split('-').map(Number);
-    const n = daysInMonth(y,m);
-    const moneyByDay = Array(n).fill(0);
-    const weightByDay = Array(n).fill(0);
-    let recCount = 0;
+    applyGraphPeriod();
+    const all = loadAll();
 
-    loadAll().forEach(r => {
-      if (r.monthKey !== key) return;
-      recCount++;
-      const idx = new Date(r.ts).getDate() - 1;
-      moneyByDay[idx] += r.total;
-      weightByDay[idx] += r.weight;
-    });
-
-    gMoney.textContent = fmt(moneyByDay.reduce((a,b)=>a+b,0));
-    gWeight.textContent = fmt(weightByDay.reduce((a,b)=>a+b,0));
-    gCount.textContent = fmtInt(recCount);
-
-    drawBarChart(chartMoney, moneyByDay, { gradId:'gradMoney', c1:'#14b8a6', c2:'#0d9488', unit:'บ.' });
-    drawBarChart(chartWeight, weightByDay, { gradId:'gradWeight', c1:'#38bdf8', c2:'#0284c7', unit:'กก.' });
+    if (graphPeriod === 'week') {
+      const dateStr = graphWeekDate.value || thisWeekDateKey();
+      if (!graphWeekDate.value) graphWeekDate.value = dateStr;
+      const [y,m,d] = dateStr.split('-').map(Number);
+      const base = new Date(y, m-1, d);
+      const start = weekStart(base);
+      const moneyByDay = Array(7).fill(0);
+      const weightByDay = Array(7).fill(0);
+      const labels = ['จ','อ','พ','พฤ','ศ','ส','อา'];
+      const dateLabels = [];
+      for (let i=0;i<7;i++){
+        const di = new Date(start); di.setDate(start.getDate()+i);
+        dateLabels.push(toDateKey(di));
+      }
+      let recCount = 0;
+      all.forEach(r => {
+        const idx = dateLabels.indexOf(r.dateKey);
+        if (idx === -1) return;
+        recCount++;
+        moneyByDay[idx] += r.total;
+        weightByDay[idx] += r.weight;
+      });
+      gMoney.textContent = fmt(moneyByDay.reduce((a,b)=>a+b,0));
+      gWeight.textContent = fmt(weightByDay.reduce((a,b)=>a+b,0));
+      gCount.textContent = fmtInt(recCount);
+      drawBarChart(chartMoney, moneyByDay, { gradId:'gradMoney', c1:'#14b8a6', c2:'#0d9488', unit:'บ.', labels, everyLabel:true });
+      drawBarChart(chartWeight, weightByDay, { gradId:'gradWeight', c1:'#38bdf8', c2:'#0284c7', unit:'กก.', labels, everyLabel:true });
+    } else {
+      const key = graphMonth.value || thisMonthKey();
+      if (!graphMonth.value) graphMonth.value = key;
+      const [y,m] = key.split('-').map(Number);
+      const n = daysInMonth(y,m);
+      const moneyByDay = Array(n).fill(0);
+      const weightByDay = Array(n).fill(0);
+      let recCount = 0;
+      all.forEach(r => {
+        if (r.monthKey !== key) return;
+        recCount++;
+        const idx = new Date(r.ts).getDate() - 1;
+        moneyByDay[idx] += r.total;
+        weightByDay[idx] += r.weight;
+      });
+      gMoney.textContent = fmt(moneyByDay.reduce((a,b)=>a+b,0));
+      gWeight.textContent = fmt(weightByDay.reduce((a,b)=>a+b,0));
+      gCount.textContent = fmtInt(recCount);
+      drawBarChart(chartMoney, moneyByDay, { gradId:'gradMoney', c1:'#14b8a6', c2:'#0d9488', unit:'บ.' });
+      drawBarChart(chartWeight, weightByDay, { gradId:'gradWeight', c1:'#38bdf8', c2:'#0284c7', unit:'กก.' });
+    }
   }
   graphMonth.addEventListener('change', renderGraph);
+  graphWeekDate.addEventListener('change', renderGraph);
+  $$('.period-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      graphPeriod = b.dataset.period;
+      renderGraph();
+    });
+  });
+  $$('[data-quick-week]').forEach(b => {
+    b.addEventListener('click', () => {
+      graphWeekDate.value = b.dataset.quickWeek === 'last' ? lastWeekDateKey() : thisWeekDateKey();
+      renderGraph();
+    });
+  });
 
   function drawBarChart(svg, values, opts){
     const W = 900, H = 260;
@@ -559,12 +655,14 @@
       const h = (v/niceMax)*innerH;
       const x = padL + i*(barW+gap);
       const y = padT + innerH - h;
+      const label = opts.labels ? opts.labels[i] : String(i+1);
       if (v > 0) {
-        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#${opts.gradId})"><title>วันที่ ${i+1}: ${fmt(v)} ${opts.unit}</title></rect>`;
+        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#${opts.gradId})"><title>${label}: ${fmt(v)} ${opts.unit}</title></rect>`;
       }
       const step = n > 20 ? 3 : (n > 10 ? 2 : 1);
-      if ((i+1) % step === 0 || i === 0 || i === n-1) {
-        g += `<text class="label" x="${x + barW/2}" y="${padT+innerH+16}" text-anchor="middle">${i+1}</text>`;
+      const show = opts.everyLabel || (i+1) % step === 0 || i === 0 || i === n-1;
+      if (show) {
+        g += `<text class="label" x="${x + barW/2}" y="${padT+innerH+16}" text-anchor="middle">${label}</text>`;
       }
     }
 
@@ -671,6 +769,8 @@
   function init(){
     histDate.value = todayKey();
     graphMonth.value = thisMonthKey();
+    graphWeekDate.value = thisWeekDateKey();
+    applyGraphPeriod();
     updateCalc();
     setSyncStatus('local');
     renderInput();
