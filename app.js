@@ -803,12 +803,12 @@
     const drc = parseFloat(sellDrc.value) || 0;
     const contr = parseFloat(sellContr.value) || 0;
     const nwt = gwt * (drc / 100);
-    const netPri = contr * (drc / 100);
-    const amount = gwt * netPri;
+    const netPriDisplayed = round1(contr * (drc / 100));
+    const amount = gwt * netPriDisplayed;
     sellNwt.textContent = fmt(nwt);
-    sellNetPri.textContent = fmt(netPri);
+    sellNetPri.textContent = fmt(netPriDisplayed);
     sellAmount.innerHTML = `${fmt(amount)} <span class="unit">บาท</span>`;
-    sellFormula.textContent = `${fmt(gwt)} กก. × ${fmt(netPri)} บ.`;
+    sellFormula.textContent = `${fmt(gwt)} กก. × ${fmt(netPriDisplayed)} บ.`;
   }
   if (sellGwt) sellGwt.addEventListener('input', updateSellCalc);
   if (sellDrc) sellDrc.addEventListener('input', updateSellCalc);
@@ -825,7 +825,7 @@
     if (!(contr > 0)) return flash(sellHint, 'Contr.Pri ต้องมากกว่า 0', true);
 
     const nwt = Math.round(gwt * (drc / 100) * 10000) / 10000;
-    const netPri = Math.round(contr * (drc / 100) * 10000) / 10000;
+    const netPri = round1(contr * (drc / 100));
     const amount = Math.round(gwt * netPri * 100) / 100;
     const now = new Date();
     const [y, m, d] = dateVal.split('-').map(Number);
