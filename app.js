@@ -589,6 +589,7 @@
     b.addEventListener('click', () => {
       histMode = b.dataset.histMode;
       renderHistory();
+      b.blur();
     });
   });
   histDate.addEventListener('change', renderHistory);
@@ -730,7 +731,7 @@
     fieldGraphMonth.hidden = isWeek;
     weekChips.hidden = !isWeek;
     monthChips.hidden = isWeek;
-    $$('.period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === graphPeriod));
+    $$('[data-period]').forEach(b => b.classList.toggle('active', b.dataset.period === graphPeriod));
   }
 
   function renderGraph(){
@@ -825,10 +826,11 @@
   }
   graphMonth.addEventListener('change', renderGraph);
   graphWeekDate.addEventListener('change', renderGraph);
-  $$('.period-btn').forEach(b => {
+  $$('[data-period]').forEach(b => {
     b.addEventListener('click', () => {
       graphPeriod = b.dataset.period;
       renderGraph();
+      b.blur();
     });
   });
   $$('[data-quick-week]').forEach(b => {
