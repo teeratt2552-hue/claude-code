@@ -20,10 +20,10 @@
 // ถ้ายังไม่ได้ตั้งค่า → แอปจะทำงานแบบออฟไลน์ใช้เครื่องเดียวอัตโนมัติ
 
 window.FIREBASE_CONFIG = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCTF8Z2HcgRVU6SqJA59erdytLM6RJrqk0",
+  authDomain: "expense-app-e6f3c.firebaseapp.com",
+  projectId: "expense-app-e6f3c",
+  storageBucket: "expense-app-e6f3c.firebasestorage.app",
+  messagingSenderId: "902396614419",
+  appId: "1:902396614419:web:e297ab6fff8703fed1ace6"
 };
