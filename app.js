@@ -646,7 +646,13 @@
     if (newVal !== confVal) return showPwErr('รหัสใหม่ 2 ช่องไม่ตรงกัน');
     await changePassword(newVal);
     closePwModal();
-    toast('เปลี่ยนรหัสผ่านแล้ว', 'ok');
+    toast('เปลี่ยนรหัสผ่านแล้ว • กรุณาเข้าสู่ระบบใหม่', 'ok');
+    // Force re-login with new password
+    sessionStorage.removeItem(SESSION_KEY);
+    loginPass.value = '';
+    loginErr.textContent = '';
+    loginScreen.classList.remove('hidden');
+    setTimeout(() => loginPass.focus(), 120);
   }
   if (btnSettings) btnSettings.addEventListener('click', openPwModal);
   if (pwCancel) pwCancel.addEventListener('click', closePwModal);

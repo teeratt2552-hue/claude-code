@@ -1,4 +1,4 @@
-const CACHE = 'buying-ledger-v5';
+const CACHE = 'buying-ledger-v6';
 const ASSETS = [
   './',
   './index.html',
