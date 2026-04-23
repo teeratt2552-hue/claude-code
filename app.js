@@ -554,8 +554,14 @@
   let pendingDelete = null;
 
   function confirmDelete(rec){
-    pendingDelete = rec;
+    pendingDelete = { kind:'record', rec };
     confirmText.innerHTML = `ลบรายการของ <strong>${escapeHtml(rec.name)}</strong><br/>${fmt(rec.weight)} กก. • ${fmt(rec.total)} บาท`;
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden','false');
+  }
+  function confirmDeleteSale(rec){
+    pendingDelete = { kind:'sale', rec };
+    confirmText.innerHTML = `ลบรายการขาย<br/>${formatDateThai(rec.date)} • ${nf2.format(rec.amount)} บาท`;
     modal.classList.add('show');
     modal.setAttribute('aria-hidden','false');
   }
@@ -567,12 +573,12 @@
   confirmCancel.addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
   confirmOk.addEventListener('click', () => {
-    if (pendingDelete) {
-      deleteRecord(pendingDelete.id);
-      toast('ลบรายการแล้ว', 'ok');
-      closeModal();
-      refreshAll();
-    }
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === 'sale') deleteSale(pendingDelete.rec.id);
+    else deleteRecord(pendingDelete.rec.id);
+    toast('ลบรายการแล้ว', 'ok');
+    closeModal();
+    refreshAll();
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && modal.classList.contains('show')) closeModal();
@@ -979,13 +985,14 @@
           <div class="who">${nf2.format(r.amount)} บาท</div>
           <div class="meta">${formatDateThai(r.date)} • GWT ${fmt(r.gwt)} • DRC ${fmt(r.drc)}% • NWT ${nf2.format(r.nwt)} • Net ${nf2.format(r.netPri)}</div>
         </div>
-        <button class="del-btn" data-del="${r.id}" aria-label="ลบ">✕</button>
+        <button class="del-btn" data-del="${r.id}" title="ลบรายการนี้" aria-label="ลบ">×</button>
       </li>
     `).join('');
     sellRecentList.querySelectorAll('[data-del]').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-del');
-        if (confirm('ลบรายการขายนี้?')) deleteSale(id);
+        const rec = loadAllSales().find(x => x.id === id);
+        if (rec) confirmDeleteSale(rec);
       });
     });
   }
