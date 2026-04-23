@@ -11,6 +11,9 @@
 //            match /records/{id} {
 //              allow read, write: if request.auth != null;
 //            }
+//            match /meta/{id} {
+//              allow read, write: if request.auth != null;
+//            }
 //          }
 //        }
 //

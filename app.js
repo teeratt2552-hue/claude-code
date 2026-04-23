@@ -9,28 +9,55 @@
   }
 
   /* ---------- Login gate ---------- */
-  const PASSWORD = '456899';
+  const DEFAULT_PASSWORD = '456899';
+  const PASSWORD_KEY = 'app_password_v1';
   const SESSION_KEY = 'app_session_v1';
   const loginScreen = document.getElementById('loginScreen');
   const loginPass = document.getElementById('loginPass');
   const loginBtn = document.getElementById('loginBtn');
   const loginErr = document.getElementById('loginErr');
 
+  function getPassword(){
+    return localStorage.getItem(PASSWORD_KEY) || DEFAULT_PASSWORD;
+  }
+  function savePasswordLocal(pw){
+    localStorage.setItem(PASSWORD_KEY, pw);
+  }
+
+  // Resolved on first cloud password snapshot (or never if cloud not configured)
+  let passwordSynced = false;
+  let waitForPwSync = null;
+  function newPwSyncWaiter(){
+    waitForPwSync = new Promise(resolve => { waitForPwSync._resolve = resolve; });
+  }
+  newPwSyncWaiter();
+
   function unlock(){
     sessionStorage.setItem(SESSION_KEY, 'ok');
     loginScreen.classList.add('hidden');
     setTimeout(() => { try { document.getElementById('inpName').focus(); } catch {} }, 200);
   }
-  function tryLogin(){
-    if (loginPass.value === PASSWORD) {
-      unlock();
-    } else {
-      loginErr.textContent = 'รหัสผ่านไม่ถูกต้อง';
-      loginPass.value = '';
-      loginPass.focus();
-      clearTimeout(tryLogin._t);
-      tryLogin._t = setTimeout(() => { loginErr.textContent = ''; }, 2500);
+
+  async function tryLogin(){
+    const entered = loginPass.value;
+    if (entered === getPassword()) { unlock(); return; }
+
+    // If cloud is configured but password hasn't synced yet, wait briefly and retry once.
+    const cfg = window.FIREBASE_CONFIG;
+    const cloudConfigured = cfg && cfg.apiKey && !String(cfg.apiKey).includes('YOUR_');
+    if (cloudConfigured && !passwordSynced) {
+      loginErr.style.color = 'var(--muted)';
+      loginErr.textContent = 'กำลังเชื่อมต่อ...';
+      await Promise.race([waitForPwSync, new Promise(r => setTimeout(r, 4000))]);
+      if (entered === getPassword()) { loginErr.textContent = ''; unlock(); return; }
     }
+
+    loginErr.style.color = '';
+    loginErr.textContent = 'รหัสผ่านไม่ถูกต้อง';
+    loginPass.value = '';
+    loginPass.focus();
+    clearTimeout(tryLogin._t);
+    tryLogin._t = setTimeout(() => { loginErr.textContent = ''; }, 2500);
   }
   loginBtn.addEventListener('click', tryLogin);
   loginPass.addEventListener('keydown', e => { if (e.key === 'Enter') tryLogin(); });
@@ -123,6 +150,17 @@
   window.addEventListener('online', () => { if (cloudReady) setSyncStatus('syncing'); });
   window.addEventListener('offline', () => { if (cloudReady) setSyncStatus('offline'); });
 
+  async function changePassword(newPw){
+    savePasswordLocal(newPw);
+    if (cloudReady && db && FB) {
+      try {
+        await FB.setDoc(FB.doc(db, 'meta', 'auth'), { password: newPw, updatedAt: new Date().toISOString() });
+      } catch (e) {
+        console.warn('Password cloud sync failed:', e);
+      }
+    }
+  }
+
   /* ---------- Init Firebase (dynamic import so login still works offline) ---------- */
   async function initCloud(){
     const cfg = window.FIREBASE_CONFIG;
@@ -148,6 +186,23 @@
       await new Promise((resolve) => {
         const off = authMod.onAuthStateChanged(auth, user => { if (user) { off(); resolve(); } });
       });
+
+      // subscribe to shared password (doc: meta/auth)
+      const metaRef = fsMod.doc(db, 'meta', 'auth');
+      fsMod.onSnapshot(metaRef, snap => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data && typeof data.password === 'string' && data.password.length > 0) {
+            savePasswordLocal(data.password);
+          }
+        }
+        passwordSynced = true;
+        if (waitForPwSync && waitForPwSync._resolve) waitForPwSync._resolve();
+      }, () => {
+        passwordSynced = true;
+        if (waitForPwSync && waitForPwSync._resolve) waitForPwSync._resolve();
+      });
+
       unsub = fsMod.onSnapshot(recordsCol, { includeMetadataChanges:true }, snap => {
         const list = [];
         snap.forEach(d => list.push(d.data()));
@@ -557,6 +612,59 @@
     if (views.graph.classList.contains('active')) renderGraph();
   }
 
+  /* ---------- Password change modal ---------- */
+  const pwModal = document.getElementById('pwModal');
+  const pwOld = document.getElementById('pwOld');
+  const pwNew = document.getElementById('pwNew');
+  const pwConfirm = document.getElementById('pwConfirm');
+  const pwErr = document.getElementById('pwErr');
+  const pwSubmit = document.getElementById('pwSubmit');
+  const pwCancel = document.getElementById('pwCancel');
+  const btnSettings = document.getElementById('btnSettings');
+
+  function openPwModal(){
+    pwOld.value = ''; pwNew.value = ''; pwConfirm.value = '';
+    pwErr.textContent = '';
+    pwModal.classList.add('show');
+    pwModal.setAttribute('aria-hidden','false');
+    setTimeout(() => pwOld.focus(), 80);
+  }
+  function closePwModal(){
+    pwModal.classList.remove('show');
+    pwModal.setAttribute('aria-hidden','true');
+  }
+  function showPwErr(msg){
+    pwErr.textContent = msg;
+  }
+  async function submitPwChange(){
+    const oldVal = pwOld.value;
+    const newVal = pwNew.value;
+    const confVal = pwConfirm.value;
+    if (oldVal !== getPassword()) return showPwErr('รหัสเดิมไม่ถูกต้อง');
+    if (!newVal || newVal.length < 4) return showPwErr('รหัสใหม่ต้องมีอย่างน้อย 4 ตัว');
+    if (newVal === oldVal) return showPwErr('รหัสใหม่ต้องไม่เหมือนรหัสเดิม');
+    if (newVal !== confVal) return showPwErr('รหัสใหม่ 2 ช่องไม่ตรงกัน');
+    await changePassword(newVal);
+    closePwModal();
+    toast('เปลี่ยนรหัสผ่านแล้ว', 'ok');
+  }
+  if (btnSettings) btnSettings.addEventListener('click', openPwModal);
+  if (pwCancel) pwCancel.addEventListener('click', closePwModal);
+  if (pwSubmit) pwSubmit.addEventListener('click', submitPwChange);
+  if (pwModal) pwModal.addEventListener('click', e => { if (e.target === pwModal) closePwModal(); });
+  [pwOld, pwNew, pwConfirm].forEach((el, i, arr) => {
+    if (!el) return;
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (i < arr.length - 1) arr[i+1].focus(); else submitPwChange();
+      }
+    });
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && pwModal && pwModal.classList.contains('show')) closePwModal();
+  });
+
   /* ---------- Init ---------- */
   function init(){
     histDate.value = todayKey();
@@ -565,7 +673,8 @@
     setSyncStatus('local');
     renderInput();
     setTimeout(() => inpName.focus(), 200);
-    initCloud();
   }
   init();
+  // Start cloud sync immediately so password can arrive before login is attempted
+  initCloud();
 })();
