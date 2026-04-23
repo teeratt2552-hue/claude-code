@@ -334,9 +334,27 @@
   const daysInMonth = (y,m) => new Date(y, m, 0).getDate();
 
   /* ---------- Number helpers ---------- */
-  const nf2 = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // ปัดเลข: ตัดทศนิยมตัวที่ 3 ทิ้ง แล้วดูตัวที่ 2 — ≥5 ปัดขึ้น, <5 ปัดลง → 1 ตำแหน่ง
+  function round1(n){
+    const x = Number(n) || 0;
+    const neg = x < 0;
+    const abs = Math.abs(x);
+    const str = abs.toFixed(10);
+    const [intStr, decStr = ''] = str.split('.');
+    const d1 = parseInt(decStr[0] || '0', 10);
+    const d2 = parseInt(decStr[1] || '0', 10);
+    let intNum = parseInt(intStr, 10);
+    let tenth = d1;
+    if (d2 >= 5) {
+      tenth++;
+      if (tenth === 10) { tenth = 0; intNum++; }
+    }
+    const result = intNum + tenth / 10;
+    return neg ? -result : result;
+  }
+  const nf1 = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const nf0 = new Intl.NumberFormat('th-TH');
-  const fmt = n => nf2.format(Number(n) || 0);
+  const fmt = n => nf1.format(round1(n));
   const fmtInt = n => nf0.format(Number(n) || 0);
 
   /* ---------- Elements ---------- */
@@ -591,7 +609,7 @@
     const totW = list.reduce((s,r)=>s+r.weight,0);
     const totM = list.reduce((s,r)=>s+r.total,0);
     rows.push([]);
-    rows.push(['','','รวม', totW.toFixed(2), '', totM.toFixed(2)]);
+    rows.push(['','','รวม', round1(totW).toFixed(1), '', round1(totM).toFixed(1)]);
 
     const csv = [header, ...rows].map(row =>
       row.map(v => {
