@@ -334,27 +334,32 @@
   const daysInMonth = (y,m) => new Date(y, m, 0).getDate();
 
   /* ---------- Number helpers ---------- */
-  // ปัดเลข: ตัดทศนิยมตัวที่ 3 ทิ้ง แล้วดูตัวที่ 2 — ≥5 ปัดขึ้น, <5 ปัดลง → 1 ตำแหน่ง
-  function round1(n){
+  // ตัดทศนิยมตัวที่ 3 ทิ้ง → เก็บ 2 ตำแหน่ง (truncate, ไม่ปัด)
+  function trunc2(n){
+    const x = Number(n) || 0;
+    const neg = x < 0;
+    const abs = Math.abs(x);
+    const str = abs.toFixed(10);
+    const [intStr, decStr = ''] = str.split('.');
+    const first2 = (decStr + '00').slice(0, 2);
+    const result = parseFloat(intStr + '.' + first2);
+    return neg ? -result : result;
+  }
+  // ปัดเป็นจำนวนเต็ม: ตัวที่ 1 ≥5 ปัดขึ้น, <5 ปัดลง (ตัวที่ 2+ ตัดทิ้ง)
+  function roundInt(n){
     const x = Number(n) || 0;
     const neg = x < 0;
     const abs = Math.abs(x);
     const str = abs.toFixed(10);
     const [intStr, decStr = ''] = str.split('.');
     const d1 = parseInt(decStr[0] || '0', 10);
-    const d2 = parseInt(decStr[1] || '0', 10);
     let intNum = parseInt(intStr, 10);
-    let tenth = d1;
-    if (d2 >= 5) {
-      tenth++;
-      if (tenth === 10) { tenth = 0; intNum++; }
-    }
-    const result = intNum + tenth / 10;
-    return neg ? -result : result;
+    if (d1 >= 5) intNum++;
+    return neg ? -intNum : intNum;
   }
-  const nf1 = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const nf2 = new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const nf0 = new Intl.NumberFormat('th-TH');
-  const fmt = n => nf1.format(round1(n));
+  const fmt = n => nf2.format(trunc2(n));
   const fmtInt = n => nf0.format(Number(n) || 0);
 
   /* ---------- Elements ---------- */
@@ -609,7 +614,7 @@
     const totW = list.reduce((s,r)=>s+r.weight,0);
     const totM = list.reduce((s,r)=>s+r.total,0);
     rows.push([]);
-    rows.push(['','','รวม', round1(totW).toFixed(1), '', round1(totM).toFixed(1)]);
+    rows.push(['','','รวม', trunc2(totW).toFixed(2), '', trunc2(totM).toFixed(2)]);
 
     const csv = [header, ...rows].map(row =>
       row.map(v => {
@@ -802,13 +807,13 @@
     const gwt = parseFloat(sellGwt.value) || 0;
     const drc = parseFloat(sellDrc.value) || 0;
     const contr = parseFloat(sellContr.value) || 0;
-    const nwt = gwt * (drc / 100);
-    const netPriDisplayed = round1(contr * (drc / 100));
-    const amount = gwt * netPriDisplayed;
-    sellNwt.textContent = fmt(nwt);
-    sellNetPri.textContent = fmt(netPriDisplayed);
-    sellAmount.innerHTML = `${fmt(amount)} <span class="unit">บาท</span>`;
-    sellFormula.textContent = `${fmt(gwt)} กก. × ${fmt(netPriDisplayed)} บ.`;
+    const nwt = roundInt(gwt * (drc / 100));
+    const netPri = trunc2(contr * (drc / 100));
+    const amount = roundInt(gwt * netPri);
+    sellNwt.textContent = nf2.format(nwt);
+    sellNetPri.textContent = nf2.format(netPri);
+    sellAmount.innerHTML = `${nf2.format(amount)} <span class="unit">บาท</span>`;
+    sellFormula.textContent = `${fmt(gwt)} กก. × ${nf2.format(netPri)} บ.`;
   }
   if (sellGwt) sellGwt.addEventListener('input', updateSellCalc);
   if (sellDrc) sellDrc.addEventListener('input', updateSellCalc);
@@ -824,9 +829,9 @@
     if (!(drc > 0)) return flash(sellHint, 'DRC ต้องมากกว่า 0', true);
     if (!(contr > 0)) return flash(sellHint, 'Contr.Pri ต้องมากกว่า 0', true);
 
-    const nwt = Math.round(gwt * (drc / 100) * 10000) / 10000;
-    const netPri = round1(contr * (drc / 100));
-    const amount = Math.round(gwt * netPri * 100) / 100;
+    const nwt = roundInt(gwt * (drc / 100));
+    const netPri = trunc2(contr * (drc / 100));
+    const amount = roundInt(gwt * netPri);
     const now = new Date();
     const [y, m, d] = dateVal.split('-').map(Number);
     const saleDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
@@ -842,7 +847,7 @@
     };
     sellGwt.value = ''; sellDrc.value = ''; sellContr.value = '';
     updateSellCalc();
-    toast(`บันทึกการขาย • ${fmt(amount)} บาท`, 'ok');
+    toast(`บันทึกการขาย • ${nf2.format(amount)} บาท`, 'ok');
     addSale(rec);
   });
 
@@ -870,8 +875,8 @@
     sellRecentList.innerHTML = recent.map(r => `
       <li class="sell-item">
         <div>
-          <div class="who">${fmt(r.amount)} บาท</div>
-          <div class="meta">${formatDateThai(r.date)} • GWT ${fmt(r.gwt)} กก. × DRC ${fmt(r.drc)}% • Net ${fmt(r.netPri)} บ./กก.</div>
+          <div class="who">${nf2.format(r.amount)} บาท</div>
+          <div class="meta">${formatDateThai(r.date)} • GWT ${fmt(r.gwt)} • DRC ${fmt(r.drc)}% • NWT ${nf2.format(r.nwt)} • Net ${nf2.format(r.netPri)}</div>
         </div>
         <button class="del-btn" data-del="${r.id}" aria-label="ลบ">✕</button>
       </li>
