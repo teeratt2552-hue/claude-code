@@ -69,6 +69,7 @@
   }
 
   const STORAGE_KEY = 'buying_records_v1';
+  const SALES_KEY = 'sales_records_v1';
   const THAI_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
   const THAI_DAYS = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 
@@ -83,12 +84,26 @@
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
   }
 
+  /* ---------- Local cache: sales ---------- */
+  function loadSalesLocal(){
+    try {
+      const raw = localStorage.getItem(SALES_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+  function saveSalesLocal(list){
+    try { localStorage.setItem(SALES_KEY, JSON.stringify(list)); } catch {}
+  }
+
   /* ---------- Cloud state ---------- */
   let cloudReady = false;
   let db = null;
   let recordsCol = null;
-  let cloudCache = null; // latest snapshot from Firestore
+  let salesCol = null;
+  let cloudCache = null; // latest snapshot from Firestore (records)
+  let cloudSalesCache = null; // latest snapshot from Firestore (sales)
   let unsub = null;
+  let unsubSales = null;
   let FB = null; // firebase modules (lazy loaded)
 
   function loadAll() {
@@ -131,9 +146,43 @@
     }
   }
 
+  /* ---------- Sales CRUD ---------- */
+  function loadAllSales(){
+    if (cloudReady && cloudSalesCache) return cloudSalesCache.slice();
+    return loadSalesLocal();
+  }
+  async function addSale(rec){
+    const list = loadSalesLocal();
+    list.push(rec);
+    saveSalesLocal(list);
+    if (cloudSalesCache) cloudSalesCache = [...cloudSalesCache.filter(r => r.id !== rec.id), rec];
+    refreshAll();
+    if (cloudReady && salesCol && FB) {
+      try {
+        setSyncStatus('syncing');
+        await FB.setDoc(FB.doc(salesCol, rec.id), rec);
+      } catch (e) { setSyncStatus('offline'); }
+    } else {
+      try { bc && bc.postMessage('sync'); } catch {}
+    }
+  }
+  async function deleteSale(id){
+    saveSalesLocal(loadSalesLocal().filter(r => r.id !== id));
+    if (cloudSalesCache) cloudSalesCache = cloudSalesCache.filter(r => r.id !== id);
+    refreshAll();
+    if (cloudReady && salesCol && FB) {
+      try {
+        setSyncStatus('syncing');
+        await FB.deleteDoc(FB.doc(salesCol, id));
+      } catch (e) { setSyncStatus('offline'); }
+    } else {
+      try { bc && bc.postMessage('sync'); } catch {}
+    }
+  }
+
   let bc = null;
   try { bc = new BroadcastChannel('buying_records_sync'); bc.onmessage = () => refreshAll(); } catch {}
-  window.addEventListener('storage', e => { if (e.key === STORAGE_KEY) refreshAll(); });
+  window.addEventListener('storage', e => { if (e.key === STORAGE_KEY || e.key === SALES_KEY) refreshAll(); });
 
   /* ---------- Sync status chip ---------- */
   const syncChip = document.getElementById('syncChip');
@@ -181,6 +230,7 @@
         localCache: fsMod.persistentLocalCache({ tabManager: fsMod.persistentMultipleTabManager() })
       });
       recordsCol = fsMod.collection(db, 'records');
+      salesCol = fsMod.collection(db, 'sales');
       const auth = authMod.getAuth(app);
       await authMod.signInAnonymously(auth);
       await new Promise((resolve) => {
@@ -218,6 +268,14 @@
         }
         refreshAll();
       }, () => setSyncStatus('offline'));
+
+      unsubSales = fsMod.onSnapshot(salesCol, { includeMetadataChanges:true }, snap => {
+        const list = [];
+        snap.forEach(d => list.push(d.data()));
+        cloudSalesCache = list;
+        saveSalesLocal(list);
+        refreshAll();
+      }, () => {});
     } catch (e) {
       console.warn('Firebase init failed:', e);
       setSyncStatus('local');
@@ -286,7 +344,7 @@
   const $$ = s => document.querySelectorAll(s);
 
   const navButtons = $$('.nav-tab');
-  const views = { input: $('#view-input'), history: $('#view-history'), graph: $('#view-graph') };
+  const views = { input: $('#view-input'), history: $('#view-history'), graph: $('#view-graph'), sell: $('#view-sell') };
 
   const inpName = $('#inpName'), inpWeight = $('#inpWeight'), inpPrice = $('#inpPrice');
   const calcTotal = $('#calcTotal'), calcFormula = $('#calcFormula');
@@ -308,6 +366,14 @@
   const chartMoneyTitle = $('#chartMoneyTitle'), chartWeightTitle = $('#chartWeightTitle');
   let graphPeriod = 'month'; // 'week' | 'month'
 
+  // Sell tab elements
+  const sellDate = $('#sellDate'), sellGwt = $('#sellGwt'), sellDrc = $('#sellDrc');
+  const sellContr = $('#sellContr');
+  const sellNwt = $('#sellNwt'), sellNetPri = $('#sellNetPri');
+  const sellAmount = $('#sellAmount'), sellFormula = $('#sellFormula');
+  const btnSellSave = $('#btnSellSave'), sellHint = $('#sellHint');
+  const sellRecentList = $('#sellRecentList'), sellRecentCount = $('#sellRecentCount');
+
   /* ---------- Tabs ---------- */
   function switchTab(name){
     navButtons.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -315,6 +381,7 @@
     if (name === 'history') renderHistory();
     if (name === 'graph') renderGraph();
     if (name === 'input') renderInput();
+    if (name === 'sell') renderSales();
     // scroll to top when changing tab on mobile
     window.scrollTo({ top:0, behavior:'smooth' });
   }
@@ -708,6 +775,95 @@
     renderInput();
     if (views.history.classList.contains('active')) renderHistory();
     if (views.graph.classList.contains('active')) renderGraph();
+    if (views.sell && views.sell.classList.contains('active')) renderSales();
+  }
+
+  /* ---------- Sell tab ---------- */
+  function updateSellCalc(){
+    if (!sellAmount) return;
+    const gwt = parseFloat(sellGwt.value) || 0;
+    const drc = parseFloat(sellDrc.value) || 0;
+    const contr = parseFloat(sellContr.value) || 0;
+    const nwt = gwt * (drc / 100);
+    const netPri = contr * (drc / 100);
+    const amount = gwt * netPri;
+    sellNwt.textContent = fmt(nwt);
+    sellNetPri.textContent = fmt(netPri);
+    sellAmount.innerHTML = `${fmt(amount)} <span class="unit">บาท</span>`;
+    sellFormula.textContent = `${fmt(gwt)} กก. × ${fmt(netPri)} บ.`;
+  }
+  if (sellGwt) sellGwt.addEventListener('input', updateSellCalc);
+  if (sellDrc) sellDrc.addEventListener('input', updateSellCalc);
+  if (sellContr) sellContr.addEventListener('input', updateSellCalc);
+
+  if (btnSellSave) btnSellSave.addEventListener('click', async () => {
+    const dateVal = sellDate.value;
+    const gwt = parseFloat(sellGwt.value);
+    const drc = parseFloat(sellDrc.value);
+    const contr = parseFloat(sellContr.value);
+    if (!dateVal) return flash(sellHint, 'กรุณาเลือกวันที่ขาย', true);
+    if (!(gwt > 0)) return flash(sellHint, 'GWT ต้องมากกว่า 0', true);
+    if (!(drc > 0)) return flash(sellHint, 'DRC ต้องมากกว่า 0', true);
+    if (!(contr > 0)) return flash(sellHint, 'Contr.Pri ต้องมากกว่า 0', true);
+
+    const nwt = Math.round(gwt * (drc / 100) * 10000) / 10000;
+    const netPri = Math.round(contr * (drc / 100) * 10000) / 10000;
+    const amount = Math.round(gwt * netPri * 100) / 100;
+    const now = new Date();
+    const [y, m, d] = dateVal.split('-').map(Number);
+    const saleDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+    const rec = {
+      id: `${now.getTime()}_${Math.random().toString(36).slice(2,8)}`,
+      date: dateVal,
+      gwt, drc, nwt,
+      contrPri: contr,
+      netPri, amount,
+      ts: saleDate.toISOString(),
+      dateKey: dateVal,
+      monthKey: dateVal.slice(0,7),
+    };
+    sellGwt.value = ''; sellDrc.value = ''; sellContr.value = '';
+    updateSellCalc();
+    toast(`บันทึกการขาย • ${fmt(amount)} บาท`, 'ok');
+    addSale(rec);
+  });
+
+  [sellGwt, sellDrc, sellContr].forEach((el, i, arr) => {
+    if (!el) return;
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (i < arr.length - 1) arr[i+1].focus();
+        else btnSellSave && btnSellSave.click();
+      }
+    });
+  });
+
+  function renderSales(){
+    if (!sellRecentList) return;
+    const list = loadAllSales();
+    const sorted = [...list].sort((a,b) => (b.ts||'').localeCompare(a.ts||''));
+    const recent = sorted.slice(0, 12);
+    sellRecentCount.textContent = list.length > recent.length ? `แสดง ${recent.length}/${list.length}` : (list.length ? `ทั้งหมด ${list.length}` : '');
+    if (recent.length === 0) {
+      sellRecentList.innerHTML = '<li class="empty">ยังไม่มีรายการขาย</li>';
+      return;
+    }
+    sellRecentList.innerHTML = recent.map(r => `
+      <li class="sell-item">
+        <div>
+          <div class="who">${fmt(r.amount)} บาท</div>
+          <div class="meta">${formatDateThai(r.date)} • GWT ${fmt(r.gwt)} กก. × DRC ${fmt(r.drc)}% • Net ${fmt(r.netPri)} บ./กก.</div>
+        </div>
+        <button class="del-btn" data-del="${r.id}" aria-label="ลบ">✕</button>
+      </li>
+    `).join('');
+    sellRecentList.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-del');
+        if (confirm('ลบรายการขายนี้?')) deleteSale(id);
+      });
+    });
   }
 
   /* ---------- Password change modal ---------- */
@@ -770,10 +926,13 @@
     histDate.value = todayKey();
     graphMonth.value = thisMonthKey();
     graphWeekDate.value = thisWeekDateKey();
+    if (sellDate) sellDate.value = todayKey();
     applyGraphPeriod();
     updateCalc();
+    updateSellCalc();
     setSyncStatus('local');
     renderInput();
+    renderSales();
     setTimeout(() => inpName.focus(), 200);
   }
   init();
