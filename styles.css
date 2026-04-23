@@ -491,6 +491,8 @@ table.history td.total{font-weight:700; color:var(--brand-deep)}
 .mini-stat.profit-down{background:linear-gradient(135deg,#fef2f2,#fee2e2); border-color:#fca5a5}
 .mini-stat.profit-down .mini-value{color:#b91c1c}
 .mini-stat.profit-down .mini-value .unit{color:#ef4444}
+.hist-seg{margin-bottom:12px}
+tr.sell-row td .sell-badge{font-weight:700; color:var(--brand-deep)}
 .chart-wrap{width:100%; overflow:hidden; border-radius:10px; background:#fbfaf7; border:1px solid var(--line); padding:10px}
 .chart{width:100%; height:auto; display:block}
 .chart .bar{transition:opacity .15s; cursor:pointer}

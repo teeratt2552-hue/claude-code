@@ -379,6 +379,12 @@
   const histDate = $('#histDate'), histSearch = $('#histSearch');
   const hCount = $('#hCount'), hWeight = $('#hWeight'), hMoney = $('#hMoney');
   const histBody = $('#histBody');
+  const histSellBody = $('#histSellBody');
+  const histBuyStats = $('#histBuyStats'), histSellStats = $('#histSellStats');
+  const histBuyCard = $('#histBuyCard'), histSellCard = $('#histSellCard');
+  const histSearchField = $('#histSearchField');
+  const hSellCount = $('#hSellCount'), hSellGwt = $('#hSellGwt'), hSellAmount = $('#hSellAmount');
+  let histMode = 'buy'; // 'buy' | 'sell'
 
   const graphMonth = $('#graphMonth');
   const graphWeekDate = $('#graphWeekDate');
@@ -493,11 +499,27 @@
   }
 
   /* ---------- History tab ---------- */
+  function applyHistMode(){
+    const isBuy = histMode === 'buy';
+    histBuyStats.hidden = !isBuy;
+    histSellStats.hidden = isBuy;
+    histBuyCard.hidden = !isBuy;
+    histSellCard.hidden = isBuy;
+    if (histSearchField) histSearchField.hidden = !isBuy;
+    $$('[data-hist-mode]').forEach(b => b.classList.toggle('active', b.dataset.histMode === histMode));
+  }
+
   function renderHistory(){
+    applyHistMode();
     const key = histDate.value || todayKey();
     if (!histDate.value) histDate.value = key;
-    const q = (histSearch.value || '').trim().toLowerCase();
 
+    if (histMode === 'buy') renderHistoryBuy(key);
+    else renderHistorySell(key);
+  }
+
+  function renderHistoryBuy(key){
+    const q = (histSearch.value || '').trim().toLowerCase();
     let list = loadAll().filter(r => r.dateKey === key);
     if (q) list = list.filter(r => r.name.toLowerCase().includes(q));
     list.sort((a,b) => a.ts.localeCompare(b.ts));
@@ -529,6 +551,46 @@
       });
     });
   }
+
+  function renderHistorySell(key){
+    let list = loadAllSales().filter(r => r.dateKey === key);
+    list.sort((a,b) => (a.ts||'').localeCompare(b.ts||''));
+
+    const totGwt = list.reduce((s,r)=>s+(r.gwt||0),0);
+    const totAmt = list.reduce((s,r)=>s+(r.amount||0),0);
+    hSellCount.textContent = fmtInt(list.length);
+    hSellGwt.textContent = fmt(totGwt);
+    hSellAmount.textContent = fmt(totAmt);
+
+    if (list.length === 0) {
+      histSellBody.innerHTML = `<tr><td colspan="7" class="empty-row">ไม่มีรายการขายในวันนี้</td></tr>`;
+      return;
+    }
+    histSellBody.innerHTML = list.map(r => `
+      <tr>
+        <td>${formatDateThai(r.date)}</td>
+        <td class="num">${fmt(r.gwt)}</td>
+        <td class="num">${fmt(r.drc)}</td>
+        <td class="num">${nf2.format(r.nwt)}</td>
+        <td class="num">${nf2.format(r.netPri)}</td>
+        <td class="num total">${nf2.format(r.amount)}</td>
+        <td class="actions"><button class="del-btn" data-del="${r.id}" title="ลบรายการนี้" aria-label="ลบ">×</button></td>
+      </tr>`).join('');
+
+    histSellBody.querySelectorAll('[data-del]').forEach(b => {
+      b.addEventListener('click', () => {
+        const rec = loadAllSales().find(x => x.id === b.dataset.del);
+        if (rec) confirmDeleteSale(rec);
+      });
+    });
+  }
+
+  $$('[data-hist-mode]').forEach(b => {
+    b.addEventListener('click', () => {
+      histMode = b.dataset.histMode;
+      renderHistory();
+    });
+  });
   histDate.addEventListener('change', renderHistory);
   histSearch.addEventListener('input', renderHistory);
 
@@ -587,43 +649,65 @@
   /* ---------- Export ---------- */
   $('#btnExportDay').addEventListener('click', () => {
     const key = histDate.value || todayKey();
-    const list = loadAll().filter(r => r.dateKey === key).sort((a,b)=>a.ts.localeCompare(b.ts));
-    if (list.length === 0) return toast('ไม่มีข้อมูลให้ export', 'error');
-    exportCSV(list, `รับซื้อ_${key}.csv`);
+    const buys = loadAll().filter(r => r.dateKey === key).sort((a,b)=>a.ts.localeCompare(b.ts));
+    const sells = loadAllSales().filter(r => r.dateKey === key).sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
+    if (buys.length === 0 && sells.length === 0) return toast('ไม่มีข้อมูลให้ export', 'error');
+    exportCSV(buys, sells, `สรุป_${key}.csv`, `วันที่ ${formatDateThai(key)}`);
   });
   $('#btnExportWeek').addEventListener('click', () => {
     const key = histDate.value || todayKey();
     const [y,m,d] = key.split('-').map(Number);
     const base = new Date(y, m-1, d);
     const s = weekStart(base), e = weekEnd(base);
-    const sKey = toDateKey(s);
-    const list = loadAll().filter(r => {
-      const rd = new Date(r.ts);
-      return rd >= s && rd <= e;
-    }).sort((a,b)=>a.ts.localeCompare(b.ts));
-    if (list.length === 0) return toast('ไม่มีข้อมูลในสัปดาห์นี้', 'error');
-    exportCSV(list, `รับซื้อ_สัปดาห์_${sKey}.csv`);
+    const sKey = toDateKey(s), eKey = toDateKey(e);
+    const inRange = r => { const rd = new Date(r.ts); return rd >= s && rd <= e; };
+    const buys = loadAll().filter(inRange).sort((a,b)=>a.ts.localeCompare(b.ts));
+    const sells = loadAllSales().filter(r => r.dateKey >= sKey && r.dateKey <= eKey).sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
+    if (buys.length === 0 && sells.length === 0) return toast('ไม่มีข้อมูลในสัปดาห์นี้', 'error');
+    exportCSV(buys, sells, `สรุป_สัปดาห์_${sKey}.csv`, `สัปดาห์ ${formatDateThai(sKey)} ถึง ${formatDateThai(eKey)}`);
   });
   $('#btnExportMonth').addEventListener('click', () => {
     const key = histDate.value || todayKey();
     const month = key.slice(0,7);
-    const list = loadAll().filter(r => r.monthKey === month).sort((a,b)=>a.ts.localeCompare(b.ts));
-    if (list.length === 0) return toast('ไม่มีข้อมูลในเดือนนี้', 'error');
-    exportCSV(list, `รับซื้อ_เดือน_${month}.csv`);
+    const buys = loadAll().filter(r => r.monthKey === month).sort((a,b)=>a.ts.localeCompare(b.ts));
+    const sells = loadAllSales().filter(r => r.monthKey === month).sort((a,b)=>(a.ts||'').localeCompare(b.ts||''));
+    if (buys.length === 0 && sells.length === 0) return toast('ไม่มีข้อมูลในเดือนนี้', 'error');
+    exportCSV(buys, sells, `สรุป_เดือน_${month}.csv`, `เดือน ${month}`);
   });
 
-  function exportCSV(list, filename){
-    const header = ['วันที่','เวลา','ลูกค้า','น้ำหนัก(กก.)','ราคา/กก.(บาท)','ราคารับซื้อ(บาท)'];
-    const rows = list.map(r => {
-      const d = new Date(r.ts);
-      return [toDateKey(d), `${pad(d.getHours())}:${pad(d.getMinutes())}`, r.name, r.weight, r.price, r.total];
-    });
-    const totW = list.reduce((s,r)=>s+r.weight,0);
-    const totM = list.reduce((s,r)=>s+r.total,0);
+  function exportCSV(buys, sells, filename, periodLabel){
+    const rows = [];
+    rows.push([`สรุปรายการ ${periodLabel || ''}`]);
     rows.push([]);
-    rows.push(['','','รวม', trunc2(totW).toFixed(2), '', trunc2(totM).toFixed(2)]);
 
-    const csv = [header, ...rows].map(row =>
+    rows.push(['[ รายการซื้อ ]']);
+    rows.push(['วันที่','เวลา','ลูกค้า','น้ำหนัก(กก.)','ราคา/กก.(บาท)','ราคารับซื้อ(บาท)']);
+    buys.forEach(r => {
+      const d = new Date(r.ts);
+      rows.push([toDateKey(d), `${pad(d.getHours())}:${pad(d.getMinutes())}`, r.name, r.weight, r.price, r.total]);
+    });
+    const totW = buys.reduce((s,r)=>s+r.weight,0);
+    const totCost = buys.reduce((s,r)=>s+r.total,0);
+    rows.push(['','','รวม', trunc2(totW).toFixed(2), '', trunc2(totCost).toFixed(2)]);
+    rows.push([]);
+
+    rows.push(['[ รายการขาย ]']);
+    rows.push(['วันที่','GWT(กก.)','DRC(%)','NWT(กก.)','Contr.Pri','Net Pri','Amount(บาท)']);
+    sells.forEach(r => {
+      rows.push([r.date, r.gwt, r.drc, r.nwt, r.contrPri, r.netPri, r.amount]);
+    });
+    const totGwt = sells.reduce((s,r)=>s+(r.gwt||0),0);
+    const totSales = sells.reduce((s,r)=>s+(r.amount||0),0);
+    rows.push(['รวม', trunc2(totGwt).toFixed(2), '', '', '', '', trunc2(totSales).toFixed(2)]);
+    rows.push([]);
+
+    const profit = totSales - totCost;
+    rows.push(['[ สรุปกำไร/ขาดทุน ]']);
+    rows.push(['ยอดขายรวม', trunc2(totSales).toFixed(2), 'บาท']);
+    rows.push(['ต้นทุน (ยอดซื้อรวม)', trunc2(totCost).toFixed(2), 'บาท']);
+    rows.push([profit >= 0 ? 'กำไรสุทธิ' : 'ขาดทุนสุทธิ', trunc2(profit).toFixed(2), 'บาท']);
+
+    const csv = rows.map(row =>
       row.map(v => {
         const s = String(v ?? '');
         return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;

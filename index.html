@@ -154,6 +154,16 @@
   <!-- HISTORY -->
   <section class="view" id="view-history">
     <div class="card compact">
+      <div class="period-toggle hist-seg">
+        <button class="period-btn active" data-hist-mode="buy" type="button">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6l-2 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 10v6"/><path d="M14 10v6"/></svg>
+          ซื้อ
+        </button>
+        <button class="period-btn" data-hist-mode="sell" type="button">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10l-1 11a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2L7 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg>
+          ขาย
+        </button>
+      </div>
       <div class="toolbar">
         <label class="field">
           <span class="field-label">เลือกวันที่</span>
@@ -163,7 +173,7 @@
           <button class="chip-btn" data-quick="today">วันนี้</button>
           <button class="chip-btn" data-quick="yesterday">เมื่อวาน</button>
         </div>
-        <label class="field grow">
+        <label class="field grow" id="histSearchField">
           <span class="field-label">ค้นหาชื่อ</span>
           <input type="text" id="histSearch" placeholder="พิมพ์ชื่อลูกค้า…" autocomplete="off" />
         </label>
@@ -185,7 +195,7 @@
       </div>
     </div>
 
-    <div class="grid stats-3">
+    <div class="grid stats-3" id="histBuyStats">
       <div class="mini-stat">
         <div class="mini-label">จำนวนรายการ</div>
         <div class="mini-value" id="hCount">0</div>
@@ -200,13 +210,39 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="grid stats-3" id="histSellStats" hidden>
+      <div class="mini-stat">
+        <div class="mini-label">จำนวนรายการขาย</div>
+        <div class="mini-value" id="hSellCount">0</div>
+      </div>
+      <div class="mini-stat">
+        <div class="mini-label">GWT รวม</div>
+        <div class="mini-value"><span id="hSellGwt">0.00</span><span class="unit"> กก.</span></div>
+      </div>
+      <div class="mini-stat brand">
+        <div class="mini-label">ยอดขาย</div>
+        <div class="mini-value"><span id="hSellAmount">0.00</span><span class="unit"> บาท</span></div>
+      </div>
+    </div>
+
+    <div class="card" id="histBuyCard">
       <div class="table-wrap">
         <table class="history">
           <thead>
             <tr><th>เวลา</th><th>ลูกค้า</th><th class="num">น้ำหนัก (กก.)</th><th class="num">ราคา/กก.</th><th class="num">ราคารับซื้อ</th><th></th></tr>
           </thead>
           <tbody id="histBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="histSellCard" hidden>
+      <div class="table-wrap">
+        <table class="history">
+          <thead>
+            <tr><th>วันที่</th><th class="num">GWT</th><th class="num">DRC%</th><th class="num">NWT</th><th class="num">Net Pri</th><th class="num">Amount</th><th></th></tr>
+          </thead>
+          <tbody id="histSellBody"></tbody>
         </table>
       </div>
     </div>
