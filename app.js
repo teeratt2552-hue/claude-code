@@ -385,7 +385,8 @@
   const fieldGraphMonth = $('#fieldGraphMonth'), fieldGraphWeek = $('#fieldGraphWeek');
   const monthChips = $('#monthChips'), weekChips = $('#weekChips');
   const gMoney = $('#gMoney'), gWeight = $('#gWeight'), gCount = $('#gCount');
-  const chartMoney = $('#chartMoney'), chartWeight = $('#chartWeight');
+  const gSales = $('#gSales'), gCost = $('#gCost'), gProfit = $('#gProfit'), gProfitCard = $('#gProfitCard');
+  const chartMoney = $('#chartMoney'), chartWeight = $('#chartWeight'), chartProfit = $('#chartProfit');
   const chartMoneyTitle = $('#chartMoneyTitle'), chartWeightTitle = $('#chartWeightTitle');
   let graphPeriod = 'month'; // 'week' | 'month'
 
@@ -645,6 +646,7 @@
   function renderGraph(){
     applyGraphPeriod();
     const all = loadAll();
+    const sales = loadAllSales();
 
     if (graphPeriod === 'week') {
       const dateStr = graphWeekDate.value || thisWeekDateKey();
@@ -654,6 +656,7 @@
       const start = weekStart(base);
       const moneyByDay = Array(7).fill(0);
       const weightByDay = Array(7).fill(0);
+      const salesByDay = Array(7).fill(0);
       const labels = ['จ','อ','พ','พฤ','ศ','ส','อา'];
       const dateLabels = [];
       for (let i=0;i<7;i++){
@@ -668,11 +671,22 @@
         moneyByDay[idx] += r.total;
         weightByDay[idx] += r.weight;
       });
-      gMoney.textContent = fmt(moneyByDay.reduce((a,b)=>a+b,0));
+      sales.forEach(s => {
+        const idx = dateLabels.indexOf(s.dateKey);
+        if (idx === -1) return;
+        salesByDay[idx] += s.amount;
+      });
+      const profitByDay = salesByDay.map((s,i) => s - moneyByDay[i]);
+      const totalCost = moneyByDay.reduce((a,b)=>a+b,0);
+      const totalSales = salesByDay.reduce((a,b)=>a+b,0);
+      const totalProfit = totalSales - totalCost;
+      gMoney.textContent = fmt(totalCost);
       gWeight.textContent = fmt(weightByDay.reduce((a,b)=>a+b,0));
       gCount.textContent = fmtInt(recCount);
+      updateProfitStats(totalSales, totalCost, totalProfit);
       drawBarChart(chartMoney, moneyByDay, { gradId:'gradMoney', c1:'#14b8a6', c2:'#0d9488', unit:'บ.', labels, everyLabel:true });
       drawBarChart(chartWeight, weightByDay, { gradId:'gradWeight', c1:'#38bdf8', c2:'#0284c7', unit:'กก.', labels, everyLabel:true });
+      drawProfitChart(chartProfit, profitByDay, { unit:'บ.', labels, everyLabel:true });
     } else {
       const key = graphMonth.value || thisMonthKey();
       if (!graphMonth.value) graphMonth.value = key;
@@ -680,6 +694,7 @@
       const n = daysInMonth(y,m);
       const moneyByDay = Array(n).fill(0);
       const weightByDay = Array(n).fill(0);
+      const salesByDay = Array(n).fill(0);
       let recCount = 0;
       all.forEach(r => {
         if (r.monthKey !== key) return;
@@ -688,11 +703,34 @@
         moneyByDay[idx] += r.total;
         weightByDay[idx] += r.weight;
       });
-      gMoney.textContent = fmt(moneyByDay.reduce((a,b)=>a+b,0));
+      sales.forEach(s => {
+        if (s.monthKey !== key) return;
+        const idx = parseInt(s.dateKey.slice(8), 10) - 1;
+        if (idx < 0 || idx >= n) return;
+        salesByDay[idx] += s.amount;
+      });
+      const profitByDay = salesByDay.map((s,i) => s - moneyByDay[i]);
+      const totalCost = moneyByDay.reduce((a,b)=>a+b,0);
+      const totalSales = salesByDay.reduce((a,b)=>a+b,0);
+      const totalProfit = totalSales - totalCost;
+      gMoney.textContent = fmt(totalCost);
       gWeight.textContent = fmt(weightByDay.reduce((a,b)=>a+b,0));
       gCount.textContent = fmtInt(recCount);
+      updateProfitStats(totalSales, totalCost, totalProfit);
       drawBarChart(chartMoney, moneyByDay, { gradId:'gradMoney', c1:'#14b8a6', c2:'#0d9488', unit:'บ.' });
       drawBarChart(chartWeight, weightByDay, { gradId:'gradWeight', c1:'#38bdf8', c2:'#0284c7', unit:'กก.' });
+      drawProfitChart(chartProfit, profitByDay, { unit:'บ.' });
+    }
+  }
+
+  function updateProfitStats(totalSales, totalCost, totalProfit){
+    if (gSales) gSales.textContent = fmt(totalSales);
+    if (gCost) gCost.textContent = fmt(totalCost);
+    if (gProfit) gProfit.textContent = fmt(totalProfit);
+    if (gProfitCard) {
+      gProfitCard.classList.remove('profit-up','profit-down');
+      if (totalProfit > 0) gProfitCard.classList.add('profit-up');
+      else if (totalProfit < 0) gProfitCard.classList.add('profit-down');
     }
   }
   graphMonth.addEventListener('change', renderGraph);
@@ -759,6 +797,67 @@
     svg.innerHTML = g;
   }
 
+  function drawProfitChart(svg, values, opts){
+    const W = 900, H = 260;
+    const padL = 56, padR = 16, padT = 14, padB = 30;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+    const n = values.length;
+    const maxPos = Math.max(0, ...values);
+    const maxNeg = Math.max(0, ...values.map(v => -v));
+    const niceTop = niceNumber(maxPos || 1);
+    const niceBot = niceNumber(maxNeg || 0);
+    const total = niceTop + niceBot;
+    const range = total > 0 ? total : 1;
+    const zeroY = padT + (niceTop / range) * innerH;
+    const gap = 3;
+    const barW = (innerW - gap*(n-1)) / n;
+
+    const ticks = 5;
+    const tickVals = [];
+    for (let i=0;i<=ticks;i++) tickVals.push(-niceBot + (range * i / ticks));
+
+    let g = `
+      <defs>
+        <linearGradient id="gradProfitUp" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#10b981"/>
+          <stop offset="100%" stop-color="#059669"/>
+        </linearGradient>
+        <linearGradient id="gradProfitDn" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#ef4444"/>
+          <stop offset="100%" stop-color="#b91c1c"/>
+        </linearGradient>
+      </defs>`;
+
+    for (const tv of tickVals) {
+      const y = padT + innerH - ((tv + niceBot) / range) * innerH;
+      g += `<line class="grid" x1="${padL}" y1="${y}" x2="${padL+innerW}" y2="${y}"/>`;
+      g += `<text class="tick" x="${padL-10}" y="${y+3}" text-anchor="end">${shortNum(tv)}</text>`;
+    }
+    g += `<line class="axis" x1="${padL}" y1="${zeroY}" x2="${padL+innerW}" y2="${zeroY}"/>`;
+
+    for (let i=0;i<n;i++){
+      const v = values[i];
+      const x = padL + i*(barW+gap);
+      const label = opts.labels ? opts.labels[i] : String(i+1);
+      if (v > 0) {
+        const h = (v / range) * innerH;
+        const y = zeroY - h;
+        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#gradProfitUp)"><title>${label}: +${fmt(v)} ${opts.unit}</title></rect>`;
+      } else if (v < 0) {
+        const h = (-v / range) * innerH;
+        g += `<rect class="bar" x="${x}" y="${zeroY}" width="${barW}" height="${h}" rx="4" fill="url(#gradProfitDn)"><title>${label}: ${fmt(v)} ${opts.unit}</title></rect>`;
+      }
+      const step = n > 20 ? 3 : (n > 10 ? 2 : 1);
+      const show = opts.everyLabel || (i+1) % step === 0 || i === 0 || i === n-1;
+      if (show) {
+        g += `<text class="label" x="${x + barW/2}" y="${padT+innerH+16}" text-anchor="middle">${label}</text>`;
+      }
+    }
+
+    svg.innerHTML = g;
+  }
+
   function niceNumber(v){
     if (v <= 0) return 1;
     const exp = Math.floor(Math.log10(v));
@@ -772,10 +871,12 @@
     return nf * pow;
   }
   function shortNum(v){
-    if (v >= 1e6) return (v/1e6).toFixed(1).replace(/\.0$/,'')+'M';
-    if (v >= 1e3) return (v/1e3).toFixed(1).replace(/\.0$/,'')+'k';
-    if (Number.isInteger(v)) return String(v);
-    return v.toFixed(1);
+    const sign = v < 0 ? '-' : '';
+    const a = Math.abs(v);
+    if (a >= 1e6) return sign + (a/1e6).toFixed(1).replace(/\.0$/,'')+'M';
+    if (a >= 1e3) return sign + (a/1e3).toFixed(1).replace(/\.0$/,'')+'k';
+    if (Number.isInteger(a)) return sign + String(a);
+    return sign + a.toFixed(1);
   }
 
   /* ---------- Toast ---------- */

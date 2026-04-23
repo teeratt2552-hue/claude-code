@@ -254,6 +254,21 @@
       </div>
     </div>
 
+    <div class="grid stats-3">
+      <div class="mini-stat">
+        <div class="mini-label">ยอดขายรวม</div>
+        <div class="mini-value"><span id="gSales">0.00</span><span class="unit"> บาท</span></div>
+      </div>
+      <div class="mini-stat">
+        <div class="mini-label">ต้นทุน (ซื้อ)</div>
+        <div class="mini-value"><span id="gCost">0.00</span><span class="unit"> บาท</span></div>
+      </div>
+      <div class="mini-stat" id="gProfitCard">
+        <div class="mini-label">กำไร / ขาดทุน</div>
+        <div class="mini-value"><span id="gProfit">0.00</span><span class="unit"> บาท</span></div>
+      </div>
+    </div>
+
     <div class="grid charts-2">
       <div class="card chart-card">
         <div class="card-title">
@@ -270,6 +285,14 @@
           <span class="unit muted">(กก.)</span>
         </div>
         <div class="chart-wrap"><svg id="chartWeight" class="chart" viewBox="0 0 900 260" preserveAspectRatio="none"></svg></div>
+      </div>
+      <div class="card chart-card chart-wide">
+        <div class="card-title">
+          <div class="chart-dot profit"></div>
+          <h2>กำไร / ขาดทุนรายวัน</h2>
+          <span class="unit muted">(บาท)</span>
+        </div>
+        <div class="chart-wrap"><svg id="chartProfit" class="chart" viewBox="0 0 900 260" preserveAspectRatio="none"></svg></div>
       </div>
     </div>
   </section>
