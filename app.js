@@ -996,61 +996,118 @@
   }
 
   /* ---------- Chart tooltip (mobile-tap friendly) ---------- */
+  // Single shared tooltip on <body> so it escapes all stacking contexts
+  let _sharedTip = null;
+  function getSharedTip(){
+    if (_sharedTip && document.body.contains(_sharedTip)) return _sharedTip;
+    _sharedTip = document.createElement('div');
+    _sharedTip.className = 'chart-tip';
+    document.body.appendChild(_sharedTip);
+    return _sharedTip;
+  }
+  function hideChartTip(){
+    if (_sharedTip) _sharedTip.classList.remove('show','up','down','below');
+  }
+
   function attachChartTooltip(svg){
-    const wrap = svg.parentElement;
-    if (!wrap) return;
-    let tip = wrap.querySelector('.chart-tip');
-    if (!tip) {
-      tip = document.createElement('div');
-      tip.className = 'chart-tip';
-      wrap.appendChild(tip);
-    }
-    const hide = () => { tip.classList.remove('show','up','down'); };
     const showAt = (hit) => {
+      const tip = getSharedTip();
       const val = parseFloat(hit.getAttribute('data-val')) || 0;
       const label = hit.getAttribute('data-label') || '';
       const unit = hit.getAttribute('data-unit') || '';
       const kind = hit.getAttribute('data-kind') || 'plain';
-      tip.classList.remove('up','down');
+      tip.classList.remove('up','down','below');
       let prefix = '';
       if (kind === 'profit') {
         if (val > 0) { tip.classList.add('up'); prefix = '+'; }
         else if (val < 0) tip.classList.add('down');
       }
       tip.innerHTML = `<span class="tip-label">${label}</span>${prefix}${fmt(val)} ${unit}`;
-      // Position in viewBox coordinates mapped to CSS pixels of wrap
-      const wrapRect = wrap.getBoundingClientRect();
+
+      // Anchor the tooltip relative to the bar's actual geometry so position
+      // follows the height of the bar (tall → high, short → low, zero → baseline,
+      // negative → below the bar's bottom).
+      const hitX = parseFloat(hit.getAttribute('x'));
+      const hitW = parseFloat(hit.getAttribute('width'));
+      const bars = svg.querySelectorAll('.bar');
+      let matched = null;
+      for (const b of bars) {
+        const bx = parseFloat(b.getAttribute('x'));
+        if (bx >= hitX && bx <= hitX + hitW) { matched = b; break; }
+      }
+      let anchorX, anchorY;
+      let forceBelow = false;
+      if (matched) {
+        const bx = parseFloat(matched.getAttribute('x'));
+        const by = parseFloat(matched.getAttribute('y'));
+        const bw = parseFloat(matched.getAttribute('width'));
+        const bh = parseFloat(matched.getAttribute('height'));
+        anchorX = bx + bw/2;
+        if (kind === 'profit' && val < 0) {
+          // Negative bar extends downward from the zero line — anchor at its end, flip below
+          anchorY = by + bh;
+          forceBelow = true;
+        } else {
+          anchorY = by;
+        }
+      } else {
+        // No bar (zero value) — anchor at the chart's axis line (baseline)
+        anchorX = hitX + hitW/2;
+        const axis = svg.querySelector('.axis');
+        anchorY = axis
+          ? parseFloat(axis.getAttribute('y1'))
+          : parseFloat(hit.getAttribute('y')) + parseFloat(hit.getAttribute('height'));
+      }
+
+      // Use viewport (fixed) coordinates since the tip lives on <body>
       const svgRect = svg.getBoundingClientRect();
       const vb = svg.viewBox && svg.viewBox.baseVal;
       const vbW = vb ? vb.width : 900;
       const vbH = vb ? vb.height : 260;
-      const hx = parseFloat(hit.getAttribute('x')) + parseFloat(hit.getAttribute('width'))/2;
-      const hy = parseFloat(hit.getAttribute('y')) || 0;
       const sx = svgRect.width / vbW;
       const sy = svgRect.height / vbH;
-      const cssX = svgRect.left - wrapRect.left + hx * sx;
-      const cssY = svgRect.top - wrapRect.top + (hy + 10) * sy;
-      tip.style.left = cssX + 'px';
-      tip.style.top = cssY + 'px';
+      let viewportX = svgRect.left + anchorX * sx;
+      let viewportY = svgRect.top + anchorY * sy;
+
       tip.classList.add('show');
+      const tipRect = tip.getBoundingClientRect();
+      const tipH = tipRect.height || 30;
+      const tipW = tipRect.width || 80;
+
+      // Flip below if not enough room above (at viewport) or if forced (negative bar)
+      if (forceBelow || viewportY - tipH - 14 < 8) {
+        tip.classList.add('below');
+      }
+
+      // Clamp horizontally to viewport
+      const minX = tipW/2 + 8;
+      const maxX = window.innerWidth - tipW/2 - 8;
+      if (viewportX < minX) viewportX = minX;
+      if (viewportX > maxX) viewportX = maxX;
+
+      tip.style.left = viewportX + 'px';
+      tip.style.top = viewportY + 'px';
     };
-    // Remove previous listener to avoid duplicates on re-render
+
     if (svg._tipHandler) svg.removeEventListener('click', svg._tipHandler);
     const handler = (e) => {
       const hit = e.target.closest('.hit');
-      if (!hit) { hide(); return; }
+      if (!hit) { hideChartTip(); return; }
+      e.stopPropagation();
       showAt(hit);
     };
     svg._tipHandler = handler;
     svg.addEventListener('click', handler);
-    // Hide when tapping outside the chart wrap
-    if (!wrap._outsideHandler) {
-      const outside = (e) => {
-        if (!wrap.contains(e.target)) wrap.querySelectorAll('.chart-tip').forEach(t => t.classList.remove('show','up','down'));
-      };
-      document.addEventListener('click', outside);
-      wrap._outsideHandler = outside;
-    }
+  }
+
+  // Global: hide tooltip on tap outside any chart, on scroll, on resize, on tab switch
+  if (!window._chartTipGlobal) {
+    window._chartTipGlobal = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.chart')) hideChartTip();
+    });
+    window.addEventListener('scroll', hideChartTip, true);
+    window.addEventListener('resize', hideChartTip);
   }
 
   function niceNumber(v){
