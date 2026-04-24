@@ -877,6 +877,7 @@
     const niceMax = niceNumber(max);
     const gap = 3;
     const barW = (innerW - gap*(n-1)) / n;
+    const hitW = barW + gap;
 
     const ticks = 5;
     const tickVals = [];
@@ -904,7 +905,7 @@
       const y = padT + innerH - h;
       const label = opts.labels ? opts.labels[i] : String(i+1);
       if (v > 0) {
-        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#${opts.gradId})"><title>${label}: ${fmt(v)} ${opts.unit}</title></rect>`;
+        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#${opts.gradId})"></rect>`;
       }
       const step = n > 20 ? 3 : (n > 10 ? 2 : 1);
       const show = opts.everyLabel || (i+1) % step === 0 || i === 0 || i === n-1;
@@ -913,7 +914,15 @@
       }
     }
 
+    // Full-column hit areas (rendered last so they sit on top for tapping)
+    for (let i=0;i<n;i++){
+      const v = values[i];
+      const x = padL + i*(barW+gap) - gap/2;
+      g += `<rect class="hit" data-idx="${i}" data-val="${v}" data-label="${opts.labels ? opts.labels[i] : String(i+1)}" data-unit="${opts.unit}" data-kind="plain" x="${x}" y="${padT}" width="${hitW}" height="${innerH}"></rect>`;
+    }
+
     svg.innerHTML = g;
+    attachChartTooltip(svg);
   }
 
   function drawProfitChart(svg, values, opts){
@@ -955,6 +964,7 @@
     }
     g += `<line class="axis" x1="${padL}" y1="${zeroY}" x2="${padL+innerW}" y2="${zeroY}"/>`;
 
+    const hitW = barW + gap;
     for (let i=0;i<n;i++){
       const v = values[i];
       const x = padL + i*(barW+gap);
@@ -962,10 +972,10 @@
       if (v > 0) {
         const h = (v / range) * innerH;
         const y = zeroY - h;
-        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#gradProfitUp)"><title>${label}: +${fmt(v)} ${opts.unit}</title></rect>`;
+        g += `<rect class="bar" x="${x}" y="${y}" width="${barW}" height="${h}" rx="4" fill="url(#gradProfitUp)"></rect>`;
       } else if (v < 0) {
         const h = (-v / range) * innerH;
-        g += `<rect class="bar" x="${x}" y="${zeroY}" width="${barW}" height="${h}" rx="4" fill="url(#gradProfitDn)"><title>${label}: ${fmt(v)} ${opts.unit}</title></rect>`;
+        g += `<rect class="bar" x="${x}" y="${zeroY}" width="${barW}" height="${h}" rx="4" fill="url(#gradProfitDn)"></rect>`;
       }
       const step = n > 20 ? 3 : (n > 10 ? 2 : 1);
       const show = opts.everyLabel || (i+1) % step === 0 || i === 0 || i === n-1;
@@ -974,7 +984,73 @@
       }
     }
 
+    // Full-column hit areas on top for tapping
+    for (let i=0;i<n;i++){
+      const v = values[i];
+      const x = padL + i*(barW+gap) - gap/2;
+      g += `<rect class="hit" data-idx="${i}" data-val="${v}" data-label="${opts.labels ? opts.labels[i] : String(i+1)}" data-unit="${opts.unit}" data-kind="profit" x="${x}" y="${padT}" width="${hitW}" height="${innerH}"></rect>`;
+    }
+
     svg.innerHTML = g;
+    attachChartTooltip(svg);
+  }
+
+  /* ---------- Chart tooltip (mobile-tap friendly) ---------- */
+  function attachChartTooltip(svg){
+    const wrap = svg.parentElement;
+    if (!wrap) return;
+    let tip = wrap.querySelector('.chart-tip');
+    if (!tip) {
+      tip = document.createElement('div');
+      tip.className = 'chart-tip';
+      wrap.appendChild(tip);
+    }
+    const hide = () => { tip.classList.remove('show','up','down'); };
+    const showAt = (hit) => {
+      const val = parseFloat(hit.getAttribute('data-val')) || 0;
+      const label = hit.getAttribute('data-label') || '';
+      const unit = hit.getAttribute('data-unit') || '';
+      const kind = hit.getAttribute('data-kind') || 'plain';
+      tip.classList.remove('up','down');
+      let prefix = '';
+      if (kind === 'profit') {
+        if (val > 0) { tip.classList.add('up'); prefix = '+'; }
+        else if (val < 0) tip.classList.add('down');
+      }
+      tip.innerHTML = `<span class="tip-label">${label}</span>${prefix}${fmt(val)} ${unit}`;
+      // Position in viewBox coordinates mapped to CSS pixels of wrap
+      const wrapRect = wrap.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      const vb = svg.viewBox && svg.viewBox.baseVal;
+      const vbW = vb ? vb.width : 900;
+      const vbH = vb ? vb.height : 260;
+      const hx = parseFloat(hit.getAttribute('x')) + parseFloat(hit.getAttribute('width'))/2;
+      const hy = parseFloat(hit.getAttribute('y')) || 0;
+      const sx = svgRect.width / vbW;
+      const sy = svgRect.height / vbH;
+      const cssX = svgRect.left - wrapRect.left + hx * sx;
+      const cssY = svgRect.top - wrapRect.top + (hy + 10) * sy;
+      tip.style.left = cssX + 'px';
+      tip.style.top = cssY + 'px';
+      tip.classList.add('show');
+    };
+    // Remove previous listener to avoid duplicates on re-render
+    if (svg._tipHandler) svg.removeEventListener('click', svg._tipHandler);
+    const handler = (e) => {
+      const hit = e.target.closest('.hit');
+      if (!hit) { hide(); return; }
+      showAt(hit);
+    };
+    svg._tipHandler = handler;
+    svg.addEventListener('click', handler);
+    // Hide when tapping outside the chart wrap
+    if (!wrap._outsideHandler) {
+      const outside = (e) => {
+        if (!wrap.contains(e.target)) wrap.querySelectorAll('.chart-tip').forEach(t => t.classList.remove('show','up','down'));
+      };
+      document.addEventListener('click', outside);
+      wrap._outsideHandler = outside;
+    }
   }
 
   function niceNumber(v){

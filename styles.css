@@ -496,14 +496,38 @@ table.history td.total{font-weight:700; color:var(--brand-deep)}
 .mini-stat.profit-down .mini-value .unit{color:#ef4444}
 .hist-seg{margin-bottom:12px}
 tr.sell-row td .sell-badge{font-weight:700; color:var(--brand-deep)}
-.chart-wrap{width:100%; overflow:hidden; border-radius:10px; background:#fbfaf7; border:1px solid var(--line); padding:10px}
-.chart{width:100%; height:auto; display:block}
+.chart-wrap{width:100%; overflow:hidden; border-radius:10px; background:#fbfaf7; border:1px solid var(--line); padding:10px; position:relative}
+.chart{width:100%; height:auto; display:block; touch-action:manipulation}
 .chart .bar{transition:opacity .15s; cursor:pointer}
 .chart .bar:hover{opacity:.82}
+.chart .hit{fill:transparent; cursor:pointer}
+.chart .bar.active{opacity:.7; stroke:#0f172a; stroke-width:1.5}
 .chart .axis{stroke:#d6d3cb; stroke-width:1}
 .chart .grid{stroke:#efede7; stroke-width:1}
 .chart .tick{fill:#9ca3af; font-size:10px; font-family:inherit}
 .chart .label{fill:#6b7280; font-size:10px; font-family:inherit}
+.chart-tip{
+  position:absolute; pointer-events:none; z-index:5;
+  background:rgba(15,23,42,.95); color:#fff;
+  padding:6px 10px; border-radius:8px;
+  font-size:12px; font-weight:600; line-height:1.3;
+  white-space:nowrap;
+  transform:translate(-50%,-110%);
+  box-shadow:0 4px 12px rgba(0,0,0,.25);
+  opacity:0; transition:opacity .15s;
+}
+.chart-tip.show{opacity:1}
+.chart-tip::after{
+  content:''; position:absolute; left:50%; top:100%;
+  transform:translateX(-50%);
+  border:5px solid transparent;
+  border-top-color:rgba(15,23,42,.95);
+}
+.chart-tip .tip-label{opacity:.7; font-weight:500; margin-right:4px}
+.chart-tip.up{background:rgba(5,150,105,.98)}
+.chart-tip.up::after{border-top-color:rgba(5,150,105,.98)}
+.chart-tip.down{background:rgba(185,28,28,.98)}
+.chart-tip.down::after{border-top-color:rgba(185,28,28,.98)}
 
 /* Modal */
 .modal{
