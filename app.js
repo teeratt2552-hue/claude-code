@@ -592,20 +592,37 @@
       b.blur();
     });
   });
-  histDate.addEventListener('change', renderHistory);
+
+  // Sync the selected date across history + graph views so changing the date
+  // updates everything immediately.
+  function syncActiveDate(dateKey){
+    if (!dateKey) return;
+    if (histDate.value !== dateKey) histDate.value = dateKey;
+    const monthKey = dateKey.slice(0,7);
+    if (graphMonth.value !== monthKey) graphMonth.value = monthKey;
+    if (graphWeekDate.value !== dateKey) graphWeekDate.value = dateKey;
+    renderHistory();
+    if (views.graph && views.graph.classList.contains('active')) renderGraph();
+  }
+
+  histDate.addEventListener('change', () => syncActiveDate(histDate.value || todayKey()));
   histSearch.addEventListener('input', renderHistory);
 
   // Quick date chips
   $$('[data-quick]').forEach(b => {
     b.addEventListener('click', () => {
-      histDate.value = b.dataset.quick === 'yesterday' ? yesterdayKey() : todayKey();
-      renderHistory();
+      syncActiveDate(b.dataset.quick === 'yesterday' ? yesterdayKey() : todayKey());
     });
   });
   $$('[data-quick-month]').forEach(b => {
     b.addEventListener('click', () => {
       graphMonth.value = b.dataset.quickMonth === 'last' ? lastMonthKey() : thisMonthKey();
+      // Also move histDate to the 1st of that month so history reflects the pick
+      const firstOfMonth = `${graphMonth.value}-01`;
+      histDate.value = firstOfMonth;
+      graphWeekDate.value = firstOfMonth;
       renderGraph();
+      if (views.history && views.history.classList.contains('active')) renderHistory();
     });
   });
 
@@ -824,8 +841,16 @@
       else if (totalProfit < 0) gProfitCard.classList.add('profit-down');
     }
   }
-  graphMonth.addEventListener('change', renderGraph);
-  graphWeekDate.addEventListener('change', renderGraph);
+  graphMonth.addEventListener('change', () => {
+    // When picking a month, also shift histDate/week into that month so all views stay in sync
+    const m = graphMonth.value || thisMonthKey();
+    const firstOfMonth = `${m}-01`;
+    histDate.value = firstOfMonth;
+    graphWeekDate.value = firstOfMonth;
+    renderGraph();
+    if (views.history && views.history.classList.contains('active')) renderHistory();
+  });
+  graphWeekDate.addEventListener('change', () => syncActiveDate(graphWeekDate.value || thisWeekDateKey()));
   $$('[data-period]').forEach(b => {
     b.addEventListener('click', () => {
       graphPeriod = b.dataset.period;
@@ -835,8 +860,7 @@
   });
   $$('[data-quick-week]').forEach(b => {
     b.addEventListener('click', () => {
-      graphWeekDate.value = b.dataset.quickWeek === 'last' ? lastWeekDateKey() : thisWeekDateKey();
-      renderGraph();
+      syncActiveDate(b.dataset.quickWeek === 'last' ? lastWeekDateKey() : thisWeekDateKey());
     });
   });
 
