@@ -275,7 +275,10 @@
         cloudSalesCache = list;
         saveSalesLocal(list);
         refreshAll();
-      }, () => {});
+      }, err => {
+        console.warn('Sales sync error:', err);
+        setSyncStatus('offline');
+      });
     } catch (e) {
       console.warn('Firebase init failed:', e);
       setSyncStatus('local');
